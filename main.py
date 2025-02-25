@@ -413,7 +413,6 @@ class GitHubManager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.load_config()  # 加载配置
-        self.initUI()
         self.github = None
         self.repo = None
         self.git_repo = None
@@ -427,6 +426,9 @@ class GitHubManager(QMainWindow):
         self.auth_timer = None  # 添加认证超时计时器
         self.auth_worker = None  # 添加认证工作线程
         self.access_token = None  # 添加访问令牌变量
+        # 保存按钮原始样式
+        self.original_button_styles = {}
+        self.initUI()
         self.setup_initial_state()
         
         # 设置窗口图标
@@ -640,19 +642,14 @@ class GitHubManager(QMainWindow):
         return False
 
     def setup_initial_state(self):
-        """设置初始状态（未登录时）"""
-        # 禁用所有需要登录的功能
-        self.repo_input.setEnabled(False)
-        self.local_path_input.setEnabled(False)
-        self.browse_button.setEnabled(False)
-        self.new_repo_input.setEnabled(False)
-        self.create_repo_button.hide()
+        """设置初始状态"""
+        # 禁用Git相关的功能，直到选择仓库
         self.file_list.setEnabled(False)
         self.refresh_button.setEnabled(False)
         self.stage_button.setEnabled(False)
         self.commit_button.setEnabled(False)
         self.push_button.setEnabled(False)
-        
+
     def enable_features(self):
         """登录成功后启用功能"""
         self.repo_input.setEnabled(True)
@@ -675,10 +672,15 @@ class GitHubManager(QMainWindow):
         
         # 设置按钮颜色
         if has_git:
-            self.refresh_button.setStyleSheet(self.refresh_button.styleSheet())
-            self.stage_button.setStyleSheet(self.stage_button.styleSheet())
-            self.commit_button.setStyleSheet(self.commit_button.styleSheet())
-            self.push_button.setStyleSheet(self.push_button.styleSheet())
+            # 恢复原始样式，而不是重新应用当前样式
+            if 'refresh' in self.original_button_styles:
+                self.refresh_button.setStyleSheet(self.original_button_styles['refresh'])
+            if 'stage' in self.original_button_styles:
+                self.stage_button.setStyleSheet(self.original_button_styles['stage'])
+            if 'commit' in self.original_button_styles:
+                self.commit_button.setStyleSheet(self.original_button_styles['commit'])
+            if 'push' in self.original_button_styles:
+                self.push_button.setStyleSheet(self.original_button_styles['push'])
         else:
             disabled_style = f"""
                 QPushButton {{
@@ -841,6 +843,13 @@ class GitHubManager(QMainWindow):
         files_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333;")
         
         self.file_list = QListWidget()
+        # 修改为ExtendedSelection模式，支持更灵活的选择方式
+        self.file_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        # 连接项目点击事件，自定义处理选择行为
+        self.file_list.itemClicked.connect(self.toggle_item_selection)
+        # 连接选择变化事件
+        self.file_list.itemSelectionChanged.connect(self.update_selection_status)
+        
         self.file_list.setStyleSheet("""
             QListWidget {
                 border: 2px solid #87CEEB;
@@ -861,20 +870,38 @@ class GitHubManager(QMainWindow):
             }
         """)
         
+        # 添加多选提示标签
+        selection_hint = QLabel('提示: 点击可选择文件，Ctrl或Shift键可多选')
+        selection_hint.setStyleSheet("font-size: 12px; color: #666; font-style: italic;")
+        
+        # 添加选择状态标签
+        self.selection_status = QLabel('已选择: 0 个文件')
+        self.selection_status.setStyleSheet("font-size: 12px; color: #333; margin-top: 5px;")
+        
         self.refresh_button = StyledButton('刷新文件列表', THEME_BLUE)
         self.refresh_button.clicked.connect(self.refresh_files)
+        # 保存原始样式
+        self.original_button_styles['refresh'] = self.refresh_button.styleSheet()
         
         self.stage_button = StyledButton('暂存选中文件', THEME_PINK)
         self.stage_button.clicked.connect(self.stage_files)
+        # 保存原始样式
+        self.original_button_styles['stage'] = self.stage_button.styleSheet()
         
         self.commit_button = StyledButton('提交更改', THEME_BLUE)
         self.commit_button.clicked.connect(self.commit_changes)
+        # 保存原始样式
+        self.original_button_styles['commit'] = self.commit_button.styleSheet()
         
         self.push_button = StyledButton('推送到GitHub', THEME_PINK)
         self.push_button.clicked.connect(self.push_to_github)
+        # 保存原始样式
+        self.original_button_styles['push'] = self.push_button.styleSheet()
         
         middle_layout.addWidget(files_label)
         middle_layout.addWidget(self.file_list)
+        middle_layout.addWidget(selection_hint)  # 添加多选提示
+        middle_layout.addWidget(self.selection_status)  # 添加选择状态
         middle_layout.addWidget(self.refresh_button)
         middle_layout.addWidget(self.stage_button)
         middle_layout.addWidget(self.commit_button)
@@ -1404,7 +1431,7 @@ class GitHubManager(QMainWindow):
             self.git_repo = git.Repo(directory)
             self.new_repo_input.setEnabled(False)
             self.create_repo_button.hide()
-            self.update_git_features(True)  # 启用Git相关功能
+            self.update_git_features(True)  # 启用Git相关功能，确保调用此函数恢复样式
             
             # 使用QTimer在主线程中调用refresh_files，避免线程安全问题
             QTimer.singleShot(100, self.refresh_files)
@@ -1493,7 +1520,10 @@ class GitHubManager(QMainWindow):
                 self.log_output("没有找到文件")
         else:
             self.log_output("文件列表加载完成")
-        
+            
+        # 重置选择状态
+        self.update_selection_status()
+
     def on_refresh_files_error(self, error_message):
         """文件列表加载出错的处理"""
         self.log_output(f"加载文件列表失败: {error_message}")
@@ -1559,7 +1589,25 @@ class GitHubManager(QMainWindow):
             return
             
         selected_items = self.file_list.selectedItems()
-        file_paths = [item.text().split(': ')[1] for item in selected_items]
+        if not selected_items:
+            self.log_output("请先选择要暂存的文件")
+            return
+            
+        file_paths = []
+        for item in selected_items:
+            text = item.text()
+            # 处理不同类型的文件项目
+            if text.startswith("📁 "):  # 文件夹
+                path = text[3:].strip().rstrip('/')
+                file_paths.append(path)
+            elif ":" in text:  # 未跟踪或已修改的文件
+                path = text.split(": ")[1].strip()
+                file_paths.append(path)
+            else:  # 普通文件
+                path = text[2:].strip()  # 移除文件图标
+                file_paths.append(path)
+        
+        self.log_output(f"准备暂存 {len(file_paths)} 个文件")
         
         self.current_worker = Worker(
             self.stage_files_worker,
@@ -1765,6 +1813,33 @@ class GitHubManager(QMainWindow):
             dialog.close()
         except:
             pass
+
+    def toggle_item_selection(self, item):
+        """处理文件列表中的项目点击事件，实现点击切换选择状态"""
+        # 在ExtendedSelection模式下，如果没有按下Ctrl或Shift键，我们需要自定义处理单击行为
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers == Qt.KeyboardModifier.NoModifier:
+            # 如果没有按下任何修饰键，单击行为应该是：
+            # 1. 如果只有一个项目被选中且就是当前点击的项目，保持选中状态
+            # 2. 如果有多个项目被选中或选中的不是当前项目，那么只选中当前项目
+            selected_items = self.file_list.selectedItems()
+            
+            # 如果当前只有这一个项目被选中，不做任何操作（保持选中状态）
+            if len(selected_items) == 1 and selected_items[0] == item:
+                pass
+            else:
+                # 取消所有选择，然后只选中当前项目
+                self.file_list.clearSelection()
+                item.setSelected(True)
+        # 如果按下了Ctrl或Shift键，让QListWidget处理多选行为
+
+    def update_selection_status(self):
+        """更新选择状态标签"""
+        selected_count = len(self.file_list.selectedItems())
+        self.selection_status.setText(f'已选择: {selected_count} 个文件')
+        
+        # 根据是否有选中项目来启用或禁用暂存按钮
+        self.stage_button.setEnabled(selected_count > 0)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
