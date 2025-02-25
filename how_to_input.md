@@ -2,6 +2,12 @@
 
 本指南将帮助您在 GitHub 上创建 OAuth 应用，并获取 Client ID 和 Client Secret，以便在 GitHuber 应用中使用。
 
+## 快速访问链接
+
+**直接创建 OAuth 应用的链接**：[https://github.com/settings/applications/new](https://github.com/settings/applications/new)
+
+> 注意：您需要先登录 GitHub 账号才能访问此链接。
+
 ## 步骤 1: 登录 GitHub
 
 首先，确保您已登录 GitHub 账号。如果没有账号，请先在 [GitHub](https://github.com) 注册。
